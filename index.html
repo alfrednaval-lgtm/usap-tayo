@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="tl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#17a398">
+<title>Usap Tayo!</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+    <radialGradient id="tg-body" cx="40%" cy="30%" r="75%"><stop offset="0" stop-color="#3a4256"/><stop offset=".6" stop-color="#20242f"/><stop offset="1" stop-color="#14161d"/></radialGradient>
+    <linearGradient id="tg-bill" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff6dc"/><stop offset="1" stop-color="#f1d9a0"/></linearGradient>
+    <linearGradient id="tg-cover" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff7a59"/><stop offset="1" stop-color="#e2553a"/></linearGradient>
+  </defs></svg>
+<template id="mascot-tpl"><svg viewBox="10 20 290 305" class="mascot-svg" aria-hidden="true">
+  
+  <!-- tail -->
+  <g class="tail">
+    <path d="M118 262 C100 300 112 314 128 312 C132 300 138 290 142 270 Z" fill="#fbfbf7" stroke="#d9d6cc" stroke-width="2"/>
+    <path d="M182 262 C200 300 188 314 172 312 C168 300 162 290 158 270 Z" fill="#fbfbf7" stroke="#d9d6cc" stroke-width="2"/>
+    <path d="M140 268 C136 300 144 318 150 318 C156 318 164 300 160 268 Z" fill="#ffffff" stroke="#d9d6cc" stroke-width="2"/>
+  </g>
+  <!-- feet -->
+  <g fill="#f29d38"><ellipse cx="128" cy="292" rx="14" ry="6"/><ellipse cx="172" cy="292" rx="14" ry="6"/></g>
+  <!-- body -->
+  <ellipse cx="150" cy="205" rx="82" ry="90" fill="url(#tg-body)"/>
+  <!-- head -->
+  <circle cx="136" cy="112" r="64" fill="url(#tg-body)"/>
+  <!-- crest tuft -->
+  <path d="M104 58 C98 38 114 34 120 52 C122 34 140 32 140 52" fill="#20242f"/>
+  <!-- casque + bill -->
+  <g class="bill">
+    <path d="M150 112 C154 86 202 70 240 92 C248 97 246 106 236 108 C212 106 182 108 156 118 Z" fill="url(#tg-bill)" stroke="#d2ad68" stroke-width="2.5" stroke-linejoin="round"/>
+    <path d="M152 114 C196 104 250 112 276 152 C262 154 238 148 212 146 C188 144 168 144 154 142 Z" fill="url(#tg-bill)" stroke="#d2ad68" stroke-width="2.5" stroke-linejoin="round"/>
+    <path d="M154 142 C184 146 222 148 262 154 C238 164 196 164 158 154 Z" fill="#f4e0b0" stroke="#d2ad68" stroke-width="2.5" stroke-linejoin="round"/>
+    <path d="M190 122 C214 122 240 130 258 142" fill="none" stroke="#dcc083" stroke-width="2" stroke-linecap="round"/>
+  </g>
+  <!-- eyes -->
+  <g class="eyes">
+    <g transform="translate(106 108)">
+      <circle r="22" fill="#e6f0f6"/>
+      <circle r="16" fill="#fff"/>
+      <circle cx="4" cy="2" r="10" fill="#2a1d14"/>
+      <circle cx="7.5" cy="-2.5" r="3.8" fill="#fff"/>
+      <circle cx="1" cy="6" r="1.7" fill="#fff" opacity=".8"/>
+    </g>
+    <g transform="translate(146 102)">
+      <circle r="18" fill="#e6f0f6"/>
+      <circle r="13" fill="#fff"/>
+      <circle cx="3.5" cy="2" r="8.3" fill="#2a1d14"/>
+      <circle cx="6" cy="-2" r="3.2" fill="#fff"/>
+      <circle cx="0.5" cy="5" r="1.4" fill="#fff" opacity=".8"/>
+    </g>
+  </g>
+  <!-- cheeks -->
+  <ellipse cx="92" cy="138" rx="11" ry="6.5" fill="#ff8fa3" opacity=".55"/>
+  <ellipse cx="146" cy="130" rx="8" ry="5" fill="#ff8fa3" opacity=".45"/>
+  <!-- book + wings -->
+  <g class="book">
+    <path d="M78 214 L150 228 L222 214 L226 276 L150 290 L74 276 Z" fill="url(#tg-cover)"/>
+    <path d="M84 208 C110 204 132 210 150 222 L150 282 C132 270 110 266 82 270 Z" fill="#fffaf0" stroke="#e8dcc0" stroke-width="2"/>
+    <path d="M216 208 C190 204 168 210 150 222 L150 282 C168 270 190 266 218 270 Z" fill="#fffaf0" stroke="#e8dcc0" stroke-width="2"/>
+    <g stroke="#c9bfa8" stroke-width="3" stroke-linecap="round">
+      <path d="M96 226 L138 232"/><path d="M96 240 L138 245"/><path d="M96 254 L130 258"/>
+      <path d="M162 232 L204 226"/><path d="M162 245 L204 240"/><path d="M162 258 L196 254"/>
+    </g>
+    <path d="M190 206 L190 236 L197 229 L204 236 L204 204" fill="#2bb3a3"/>
+  </g>
+  <g class="wing-l"><path d="M76 176 C52 196 50 246 70 262 C82 270 94 260 92 246 C88 222 92 200 96 186 Z" fill="#262b38"/></g>
+  <g class="wing-r"><path d="M224 176 C248 196 250 246 230 262 C218 270 206 260 208 246 C212 222 208 200 204 186 Z" fill="#262b38"/></g>
+  <!-- gloss -->
+  <path d="M104 72 C118 58 138 54 150 58" fill="none" stroke="#6b7690" stroke-width="5" stroke-linecap="round" opacity=".5"/>
+</svg></template>
+
+<!-- ============ PROFILES ============ -->
+<section id="scr-home" class="screen home" hidden>
+  <div class="home-top">
+    <button class="icon-btn" id="btn-parent" title="Para sa magulang (Parents)">&#9881;</button>
+  </div>
+  <div class="home-stage">
+    <div class="mascot-wrap">
+      <div class="bubble">Tara, usap tayo!</div>
+      <div class="bouncer"><div class="mascot" data-mascot></div></div>
+      <div class="shadow"></div>
+    </div>
+    <h1 class="brand">Usap Tayo!</h1>
+    <p class="sub">Sino ang maglalaro? <span class="en">Who's playing?</span></p>
+    <div class="profiles" id="profiles"></div>
+  </div>
+</section>
+
+<!-- ============ MAP ============ -->
+<section id="scr-map" class="screen map" hidden>
+  <header class="bar">
+    <button class="icon-btn" id="map-back" title="Back">&#8592;</button>
+    <div class="bar-title"><span id="map-avatar"></span> <b id="map-name"></b></div>
+    <div class="chips">
+      <span class="chip" title="Sunod-sunod na araw (day streak)">&#128293; <b id="map-streak">0</b></span>
+      <span class="chip" title="Bituin (stars)">&#11088; <b id="map-stars">0</b></span>
+      <button class="chip chip-btn" id="map-words" title="Mga salita ko (my phrases)">&#128172; <b id="map-wordcount">0</b></button>
+    </div>
+  </header>
+  <main class="map-main">
+    <div class="map-hello"><div class="mini" data-mascot></div><p id="map-hello">Pumili ng aralin! <span class="en">Pick a lesson!</span></p></div>
+    <div class="units" id="units"></div>
+  </main>
+</section>
+
+<!-- ============ LESSON ============ -->
+<section id="scr-lesson" class="screen lesson" hidden>
+  <header class="bar lesson-bar">
+    <button class="icon-btn" id="les-close" title="Stop">&#10005;</button>
+    <div class="progress"><div class="progress-fill" id="les-progress"></div></div>
+    <span class="chip" id="les-count">1/10</span>
+  </header>
+  <main class="les-main">
+    <div class="prompt">
+      <div class="mini talk" data-mascot></div>
+      <div class="prompt-text">
+        <div class="prompt-tl" id="les-prompt">Pakinggan mo.</div>
+        <div class="en" id="les-prompt-en">Listen.</div>
+      </div>
+      <div class="audio-btns">
+        <button class="round-btn" id="btn-play" title="Pakinggan ulit (play again)">&#128266;</button>
+        <button class="round-btn small" id="btn-slow" title="Dahan-dahan (slow)">&#128034;</button>
+      </div>
+    </div>
+    <div class="stage" id="les-stage"></div>
+    <div class="feedback" id="les-feedback" aria-live="polite"></div>
+  </main>
+  <footer class="les-foot" id="les-foot"></footer>
+</section>
+
+<!-- ============ RESULT ============ -->
+<section id="scr-result" class="screen result" hidden>
+  <canvas id="confetti"></canvas>
+  <div class="result-stage">
+    <div class="mascot-wrap">
+      <div class="bubble" id="res-bubble">Magaling!</div>
+      <div class="bouncer happy"><div class="mascot" data-mascot></div></div>
+      <div class="shadow"></div>
+    </div>
+    <h1 id="res-title">Tapos na tayo!</h1>
+    <div class="stars" id="res-stars"></div>
+    <p class="sub" id="res-sub"></p>
+    <div class="row-btns">
+      <button class="btn btn-soft" id="res-again">&#128257; Ulitin</button>
+      <button class="btn btn-primary" id="res-next">Susunod &#8594;</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ MY WORDS ============ -->
+<section id="scr-words" class="screen words" hidden>
+  <header class="bar">
+    <button class="icon-btn" id="words-back" title="Back">&#8592;</button>
+    <div class="bar-title"><b>Mga salita ko</b> <span class="en">Phrases I can say</span></div>
+  </header>
+  <main class="words-main" id="words-list"></main>
+</section>
+
+<!-- ============ PARENT ============ -->
+<section id="scr-parent" class="screen parent" hidden>
+  <header class="bar">
+    <button class="icon-btn" id="par-back" title="Back">&#8592;</button>
+    <div class="bar-title"><b>Para sa magulang</b> <span class="en">Parent settings</span></div>
+  </header>
+  <main class="par-main">
+    <div class="card" id="pin-card">
+      <h2 id="pin-title">PIN</h2>
+      <p class="help" id="pin-help">Enter your parent PIN.</p>
+      <div class="inline"><input type="password" id="pin-input" inputmode="numeric" maxlength="8" placeholder="PIN"> <button class="btn btn-primary btn-sm" id="pin-ok">OK</button></div>
+      <p class="err" id="pin-err"></p>
+    </div>
+
+    <div id="par-body" hidden>
+      <div class="card">
+        <h2>Kids</h2>
+        <p class="help">Each kid gets their own progress on this device. Age 9 and up types the Tagalog; younger kids use word tiles.</p>
+        <div id="kid-rows"></div>
+        <button class="btn btn-soft btn-sm" id="kid-add">+ Add kid</button>
+      </div>
+
+      <div class="card">
+        <h2>Talusi's Tagalog voice</h2>
+        <select id="set-voice">
+          <option value="auto">Best available (recommended)</option>
+          <option value="device">This device's Filipino voice</option>
+          <option value="clips">Built-in voice</option>
+        </select>
+        <button class="btn btn-soft btn-sm" id="voice-test">&#9654; Hear it</button>
+        <p class="help" id="voice-info"></p>
+      </div>
+
+      <div class="card">
+        <h2>Speaking check</h2>
+        <label class="check"><input type="checkbox" id="set-listen"> Listen to the kid and check what they said</label>
+        <p class="help" id="listen-info"></p>
+        <label class="check"><input type="checkbox" id="set-easy"> Be extra forgiving (accept close tries)</label>
+      </div>
+
+      <div class="card">
+        <h2>Phone alerts</h2>
+        <p class="help">Same free ntfy app as StoryGate. Use the same topic to get both apps' alerts in one place.</p>
+        <div class="inline grow"><input type="text" id="set-ntfy" placeholder="storygate-..." spellcheck="false"> <button class="btn btn-soft btn-sm" id="ntfy-test">Test</button></div>
+        <p class="help" id="ntfy-result"></p>
+      </div>
+
+      <div class="card">
+        <h2>Progress</h2>
+        <div id="par-progress"></div>
+      </div>
+
+      <div class="card">
+        <h2>Change PIN</h2>
+        <div class="inline"><input type="password" id="pin-new" inputmode="numeric" maxlength="8" placeholder="New PIN (4-8 digits)"> <button class="btn btn-soft btn-sm" id="pin-save">Save PIN</button></div>
+      </div>
+      <p class="help center" id="par-saved"></p>
+    </div>
+  </main>
+</section>
+
+<div class="toast" id="toast" hidden></div>
+<script src="app.js"></script>
+</body>
+</html>
