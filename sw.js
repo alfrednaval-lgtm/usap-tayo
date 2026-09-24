@@ -1,5 +1,5 @@
 /* Usap Tayo! offline support: network first (so updates show up), cached copy when offline. */
-const CACHE = "usap-v3";
+const CACHE = "usap-v4";
 const SHELL = ["./", "index.html", "app.css", "app.js", "content.json", "manifest.json", "a-sys.json", "bg-music.mp3",
   "nunito-latin-700-normal.woff2", "nunito-latin-800-normal.woff2", "nunito-latin-900-normal.woff2", "andika-latin-700-normal.woff2"];
 self.addEventListener("install", (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).catch(() => {})); self.skipWaiting(); });

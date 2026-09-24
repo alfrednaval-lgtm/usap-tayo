@@ -12,6 +12,6 @@ Each lesson mixes listening, repeating after Talusi, answering Talusi's question
 Each kid makes their own player (name, animal buddy, how much Tagalog they know). Talusi adjusts the level as they play.
 Players and progress are saved on each device. Parents can save a backup file to move them to another device.
 
-Talusi's Tagalog voice: pre-made clips from Microsoft's Filipino neural voice (Blessica), for family, non-commercial use.
+Talusi's Tagalog voice: pre-made clips generated with Microsoft Azure AI Speech (Filipino neural voice Blessica).
 Background music: original, composed for this app.
 Fonts: Nunito and Andika (SIL Open Font License, see the OFL files).
