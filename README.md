@@ -11,5 +11,6 @@ Tagalog speaking and writing practice for kids, with Talusi the Palawan hornbill
 Each lesson mixes listening, repeating after Talusi, answering Talusi's questions, building sentences and typing (or word tiles for younger kids).
 Progress is saved on each device.
 
-Built-in Tagalog voice: generated with Meta's MMS text-to-speech model (CC BY-NC 4.0, non-commercial use).
+Talusi's Tagalog voice: pre-made clips from Microsoft's Filipino neural voice (Blessica), for family, non-commercial use.
+Background music: original, composed for this app.
 Fonts: Nunito and Andika (SIL Open Font License, see the OFL files).

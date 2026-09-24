@@ -79,6 +79,7 @@
 <!-- ============ PROFILES ============ -->
 <section id="scr-home" class="screen home" hidden>
   <div class="home-top">
+    <button class="icon-btn" id="btn-music" title="Music">&#127925;</button>
     <button class="icon-btn" id="btn-parent" title="Para sa magulang (Parents)">&#9881;</button>
   </div>
   <div class="home-stage">
@@ -188,12 +189,17 @@
       <div class="card">
         <h2>Talusi's Tagalog voice</h2>
         <select id="set-voice">
-          <option value="auto">Best available (recommended)</option>
+          <option value="auto">Talusi's voice (recommended)</option>
           <option value="device">This device's Filipino voice</option>
-          <option value="clips">Built-in voice</option>
         </select>
         <button class="btn btn-soft btn-sm" id="voice-test">&#9654; Hear it</button>
         <p class="help" id="voice-info"></p>
+      </div>
+
+      <div class="card">
+        <h2>Background music</h2>
+        <label class="check"><input type="checkbox" id="set-music"> Soft music on the menu screens</label>
+        <p class="help">It fades out when a lesson starts and dips whenever Talusi talks. Kids can also tap the &#127925; button on the first screen.</p>
       </div>
 
       <div class="card">

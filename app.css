@@ -51,7 +51,8 @@ button{font:inherit;color:inherit}
 
 /* home */
 .home{background:linear-gradient(180deg,#8fdcf0,#d5f5f2 60%,#fff3cf)}
-.home-top{display:flex;justify-content:flex-end;padding:12px 14px}
+.home-top{display:flex;justify-content:flex-end;gap:8px;padding:12px 14px}
+.icon-btn.off{opacity:.55}
 .home-stage{flex:1;overflow:auto;display:flex;flex-direction:column;align-items:center;padding:0 16px 24px;text-align:center}
 .brand{font-size:clamp(34px,6vh,54px);font-weight:900;margin:14px 0 2px;letter-spacing:-.5px}
 .sub{font-size:clamp(18px,2.6vh,24px);margin:4px 0 16px}

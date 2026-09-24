@@ -14,12 +14,13 @@ function freshDB() {
   return {
     kids: [{ id: "k1", name: "Kuya", age: 10, av: "🦅" }, { id: "k2", name: "Bunso", age: 7, av: "🦋" }],
     prog: {},
-    set: { pin: "", voice: "auto", listen: true, easy: false, ntfy: "" },
+    set: { pin: "", voice: "auto", listen: true, easy: false, ntfy: "", music: true },
   };
 }
 let DB;
 try { DB = JSON.parse(localStorage.getItem(KEY)) || freshDB(); } catch { DB = freshDB(); }
 DB.set = Object.assign(freshDB().set, DB.set || {});
+if (DB.set.voice === "clips") DB.set.voice = "auto";   // the built-in voice is now the default
 function save() { try { localStorage.setItem(KEY, JSON.stringify(DB)); } catch { /* private mode: progress lives until the tab closes */ } }
 function P(kid) {
   const p = (DB.prog[kid.id] = DB.prog[kid.id] || {});
@@ -28,7 +29,10 @@ function P(kid) {
 }
 
 /* ================= screens ================= */
-function show(id) { document.querySelectorAll(".screen").forEach((s) => (s.hidden = s.id !== id)); }
+function show(id) {
+  document.querySelectorAll(".screen").forEach((s) => (s.hidden = s.id !== id));
+  Music.setScene(id === "scr-lesson" ? "lesson" : id === "scr-parent" ? "parent" : "menu");
+}
 function fillMascots(root = document) {
   const tpl = $("mascot-tpl");
   root.querySelectorAll("[data-mascot]").forEach((el) => { if (!el.firstElementChild) el.appendChild(tpl.content.cloneNode(true)); });
@@ -57,12 +61,14 @@ const Voice = {
   mode() {
     const dv = this.device(), m = DB.set.voice;
     if (m === "device" && dv) return "device";
-    if (m === "auto" && dv && /natural|online|google/i.test(dv.name)) return "device";
     return "clips";
   },
+  tok: 0,
   stop() {
+    this.tok++;
     try { if (this.audio) { this.audio.pause(); this.audio = null; } } catch {}
     try { speechSynthesis.cancel(); } catch {}
+    Music.duck(false);
   },
   clip(text) {
     const h = C.audio[text]; if (!h) return null;
@@ -74,9 +80,12 @@ const Voice = {
   },
   play(text, slow = false) {
     this.stop();
+    const tok = this.tok;
+    Music.duck(true);
     return new Promise((res) => {
       const src = this.clip(text);
-      const done = () => res();
+      let fin = false;
+      const done = () => { if (fin) return; fin = true; if (tok === this.tok) Music.duck(false); res(); };
       if (src) {
         const a = new Audio(src); this.audio = a;
         a.playbackRate = slow ? 0.7 : 1; a.preservesPitch = true;
@@ -99,10 +108,72 @@ const Voice = {
 };
 if ("speechSynthesis" in window) { speechSynthesis.getVoices(); speechSynthesis.onvoiceschanged = () => {}; }
 
-/* ================= sounds ================= */
+/* ================= sounds & background music ================= */
+/* One audio context for everything. Music plays on the menu screens, fades out for lessons,
+   dips under Talusi's voice, and fades back in. All changes are gradual ramps, never cuts. */
+const LOOP_LEN = 45.7142857;          // exact length of bg-music.mp3's loop, in seconds
+const Music = {
+  ctx: null, gain: null, src: null, buf: null, lead: 0, loading: null, started: false,
+  scene: "menu", ducked: false, hidden: false,
+  LEVEL: { menu: 0.3, parent: 0.12, lesson: 0 },
+  audio() {
+    if (!this.ctx) {
+      const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null;
+      this.ctx = new AC(); this.gain = this.ctx.createGain(); this.gain.gain.value = 0; this.gain.connect(this.ctx.destination);
+    }
+    return this.ctx;
+  },
+  load() {
+    if (!this.loading) this.loading = fetch("bg-music.mp3").then((r) => r.arrayBuffer())
+      .then((ab) => new Promise((ok, bad) => this.ctx.decodeAudioData(ab, ok, bad)))
+      .then((buf) => {
+        // skip the encoder's silent lead-in so the loop joins without a gap
+        const d = buf.getChannelData(0); let i = 0; const max = Math.min(d.length, buf.sampleRate * 0.2);
+        while (i < max && Math.abs(d[i]) < 1e-4) i++;
+        this.buf = buf; this.lead = i < max ? i / buf.sampleRate : 0;
+      }).catch(() => { this.loading = null; });
+    return this.loading;
+  },
+  /** Called on the first tap (browsers only allow sound after one). Safe to call again. */
+  async start() {
+    const ctx = this.audio(); if (!ctx) return;
+    if (ctx.state === "suspended") { try { await ctx.resume(); } catch {} }
+    if (!DB.set.music || this.src) { this.apply(); return; }
+    await this.load();
+    if (this.buf && !this.src) {
+      const s = ctx.createBufferSource(); s.buffer = this.buf; s.loop = true;
+      s.loopStart = this.lead; s.loopEnd = Math.min(this.buf.duration, this.lead + LOOP_LEN);
+      s.connect(this.gain); s.start(0, this.lead); this.src = s;
+    }
+    this.apply();
+  },
+  target() {
+    if (!DB.set.music || this.hidden) return 0;
+    return (this.LEVEL[this.scene] || 0) * (this.ducked ? 0.3 : 1);
+  },
+  apply(quick) {
+    if (!this.gain) return;
+    const t = this.ctx.currentTime, g = this.gain.gain, v = this.target(), cur = g.value;
+    g.cancelScheduledValues(t); g.setValueAtTime(cur, t);
+    // down: quick dip for the voice (~0.4 s), softer fade for scene changes (~1 s); up: slow swell (~2.5 s)
+    g.setTargetAtTime(v, t, v < cur ? (quick ? 0.12 : 0.35) : 0.8);
+  },
+  setScene(sc) { if (sc === this.scene) return; this.scene = sc; this.apply(); },
+  duck(on) { if (on === this.ducked) return; this.ducked = on; this.apply(on); },
+  toggle(on) { DB.set.music = on; save(); if (on) this.start(); else this.apply(); paintMusicBtn(); },
+};
+function paintMusicBtn() {
+  const b = $("btn-music"); if (!b) return;
+  b.innerHTML = DB.set.music ? "&#127925;" : "&#128263;";
+  b.title = DB.set.music ? "Music: on" : "Music: off";
+  b.classList.toggle("off", !DB.set.music);
+}
+["pointerdown", "keydown", "touchstart"].forEach((ev) => document.addEventListener(ev, () => Music.start(), { passive: true }));
+document.addEventListener("visibilitychange", () => { Music.hidden = document.hidden; Music.apply(); });
+
 function chime(good) {
   try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = Music.audio(); if (!ctx) return;
     (good ? [523.25, 659.25, 783.99] : [392, 330]).forEach((f, i) => {
       const o = ctx.createOscillator(), g = ctx.createGain();
       o.type = "triangle"; o.frequency.value = f;
@@ -110,7 +181,6 @@ function chime(good) {
       g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.14, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
       o.connect(g).connect(ctx.destination); o.start(t); o.stop(t + 0.4);
     });
-    setTimeout(() => ctx.close(), 1200);
   } catch {}
 }
 
@@ -596,11 +666,11 @@ function renderParent() {
       del.dataset.sure = "1"; del.textContent = "Sure?"; setTimeout(() => { delete del.dataset.sure; del.innerHTML = "&#10005;"; }, 3000);
     };
   });
-  $("set-voice").value = s.voice;
+  $("set-voice").value = s.voice === "device" ? "device" : "auto";
   const dv = Voice.device();
-  $("voice-info").textContent = dv
-    ? "This device has a Filipino voice: " + dv.name + (/natural|online|google/i.test(dv.name) ? " (natural sounding, used by default)." : ". The built-in voice is used by default.")
-    : "No Filipino voice on this device, so the built-in voice is used. On Windows, the Edge browser has natural Filipino voices.";
+  $("voice-info").textContent = "Talusi's voice is a natural Filipino voice built into the app, so it sounds the same on every device and works offline. " +
+    (dv ? "This device also has its own Filipino voice (" + dv.name + ") if you prefer it." : "");
+  $("set-music").checked = s.music;
   $("set-listen").checked = s.listen; $("set-easy").checked = s.easy;
   $("listen-info").textContent = SR
     ? "This browser can listen and check Tagalog (needs internet; the recording goes to the browser's speech service for checking)."
@@ -621,6 +691,8 @@ $("kid-add").onclick = () => { DB.kids.push({ id: "k" + Date.now(), name: "Bago"
 $("set-voice").onchange = (e) => { DB.set.voice = e.target.value; saved(); renderParent(); };
 $("voice-test").onclick = async () => { await Voice.ensure("sys"); Voice.play(C.sys.hello.tl); };
 $("set-listen").onchange = (e) => { DB.set.listen = e.target.checked; saved(); };
+$("set-music").onchange = (e) => { Music.toggle(e.target.checked); saved(); };
+$("btn-music").onclick = () => Music.toggle(!DB.set.music);
 $("set-easy").onchange = (e) => { DB.set.easy = e.target.checked; saved(); };
 $("set-ntfy").oninput = (e) => { DB.set.ntfy = e.target.value.trim(); saved(); };
 $("ntfy-test").onclick = async () => { $("ntfy-result").textContent = "Sending..."; const ok = await notifyParent("Usap Tayo! test", "Phone alerts work. You'll get a message after each lesson."); $("ntfy-result").textContent = ok ? "Sent. Check your phone." : "Couldn't send. Check the topic and the internet."; };
@@ -631,10 +703,10 @@ async function boot() {
   fillMascots();
   try { C = await fetch("content.json").then((r) => r.json()); }
   catch { document.body.innerHTML = "<p style='padding:30px'>Couldn't load the lessons. Check the internet and reload.</p>"; return; }
-  renderHome();
+  renderHome(); paintMusicBtn();
   Voice.ensure("sys");
   if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
 }
-window.__usap = { DB, scoreSpeech, scoreTyping, get L() { return L; } };
+window.__usap = { DB, Music, Voice, scoreSpeech, scoreTyping, get L() { return L; } };
 boot();
 })();
