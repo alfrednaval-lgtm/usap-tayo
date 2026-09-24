@@ -89,16 +89,30 @@
       <div class="shadow"></div>
     </div>
     <h1 class="brand">Usap Tayo!</h1>
-    <p class="sub">Sino ang maglalaro? <span class="en">Who's playing?</span></p>
+    <p class="sub" id="home-sub">Sino ang maglalaro? <span class="en">Who's playing?</span></p>
     <div class="profiles" id="profiles"></div>
   </div>
+</section>
+
+<!-- ============ NEW / EDIT PLAYER ============ -->
+<section id="scr-new" class="screen newp" hidden>
+  <header class="bar">
+    <button class="icon-btn" id="new-back" title="Back">&#8592;</button>
+    <div class="bar-title"><b id="new-title">Bagong player</b> <span class="en" id="new-title-en">New player</span></div>
+    <div class="dots" id="new-dots"></div>
+  </header>
+  <main class="new-main">
+    <div class="map-hello"><div class="mini talk" data-mascot></div><p id="new-q"></p></div>
+    <div id="new-body" class="new-body"></div>
+  </main>
+  <footer class="les-foot"><button class="btn btn-primary" id="new-next">Susunod &#8594;</button></footer>
 </section>
 
 <!-- ============ MAP ============ -->
 <section id="scr-map" class="screen map" hidden>
   <header class="bar">
     <button class="icon-btn" id="map-back" title="Back">&#8592;</button>
-    <div class="bar-title"><span id="map-avatar"></span> <b id="map-name"></b></div>
+    <button class="bar-title as-btn" id="map-edit" title="Ayusin (edit player)"><span id="map-avatar"></span> <b id="map-name"></b> <span id="map-level"></span> <span class="pen">&#9998;</span></button>
     <div class="chips">
       <span class="chip" title="Sunod-sunod na araw (day streak)">&#128293; <b id="map-streak">0</b></span>
       <span class="chip" title="Bituin (stars)">&#11088; <b id="map-stars">0</b></span>
@@ -147,6 +161,7 @@
     </div>
     <h1 id="res-title">Tapos na tayo!</h1>
     <div class="stars" id="res-stars"></div>
+    <p class="level-note" id="res-level" hidden></p>
     <p class="sub" id="res-sub"></p>
     <div class="row-btns">
       <button class="btn btn-soft" id="res-again">&#128257; Ulitin</button>
@@ -180,10 +195,17 @@
 
     <div id="par-body" hidden>
       <div class="card">
-        <h2>Kids</h2>
-        <p class="help">Each kid gets their own progress on this device. Age 9 and up types the Tagalog; younger kids use word tiles.</p>
+        <h2>Players</h2>
+        <p class="help">Kids make their own player on the first screen and can edit it by tapping their name. Talusi moves the level up after 3 strong lessons in a row and down after 2 hard ones. You can set it here too.</p>
         <div id="kid-rows"></div>
-        <button class="btn btn-soft btn-sm" id="kid-add">+ Add kid</button>
+      </div>
+
+      <div class="card">
+        <h2>Backup &amp; move to another device</h2>
+        <p class="help">Players and progress live on this device only. Save a backup file to keep them safe or to carry them to another PC or phone (for example, from home to school).</p>
+        <div class="inline"><button class="btn btn-soft btn-sm" id="bk-save">&#11015; Save a backup</button> <button class="btn btn-soft btn-sm" id="bk-load">&#11014; Load a backup</button></div>
+        <input type="file" id="bk-file" accept=".json,application/json" hidden>
+        <p class="help" id="bk-result"></p>
       </div>
 
       <div class="card">

@@ -6,13 +6,23 @@ const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const shuffle = (a) => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 const today = (d = new Date()) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
-const AVATARS = ["🐯", "🦅", "🐢", "🦈", "🐬", "🦋", "🐱", "🐶", "🦖", "🐙", "🦜", "🐸"];
+/* Buddies: animals of Palawan and its seas, with their Tagalog names */
+const BUDDIES = [["🐢", "Pawikan"], ["🦈", "Butanding"], ["🦚", "Tandikan"], ["🦜", "Katala"], ["🐒", "Unggoy"], ["🦌", "Pilandok"],
+  ["🐬", "Lumba-lumba"], ["🐊", "Buwaya"], ["🦀", "Alimango"], ["🐠", "Isda"], ["🦋", "Paru-paro"], ["🐙", "Pugita"]];
+const COLORS = ["#ff6b4a", "#17a398", "#7b61ff", "#f5b400", "#ff5fa2", "#2d8cff"];
+const LEVELS = [
+  null,
+  { pic: "🌱", tl: "Nagsisimula pa lang ako.", en: "I'm just starting." },
+  { pic: "👂", tl: "Naiintindihan ko, pero hirap akong magsalita.", en: "I understand, but speaking is hard." },
+  { pic: "🗣️", tl: "Nakakapagsalita na ako nang kaunti.", en: "I can speak a little." },
+];
+const newId = () => "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
 /* ================= storage (this device only) ================= */
 const KEY = "usap.v1";
 function freshDB() {
   return {
-    kids: [{ id: "k1", name: "Kuya", age: 10, av: "🦅" }, { id: "k2", name: "Bunso", age: 7, av: "🦋" }],
+    kids: [],
     prog: {},
     set: { pin: "", voice: "auto", listen: true, easy: false, ntfy: "", music: true },
   };
@@ -21,6 +31,13 @@ let DB;
 try { DB = JSON.parse(localStorage.getItem(KEY)) || freshDB(); } catch { DB = freshDB(); }
 DB.set = Object.assign(freshDB().set, DB.set || {});
 if (DB.set.voice === "clips") DB.set.voice = "auto";   // the built-in voice is now the default
+/* older saves had an age per kid; turn it into a level and an answer style */
+DB.kids.forEach((k) => {
+  if (!k.level) { k.level = k.age && k.age < 9 ? 1 : 2; k.input = k.age && k.age < 9 ? "tiles" : "keys"; }
+  if (!k.input) k.input = k.level === 1 ? "tiles" : "keys";
+  if (!k.color) k.color = COLORS[Math.abs([...k.id].reduce((a, c) => a + c.charCodeAt(0), 0)) % COLORS.length];
+  delete k.age;
+});
 function save() { try { localStorage.setItem(KEY, JSON.stringify(DB)); } catch { /* private mode: progress lives until the tab closes */ } }
 function P(kid) {
   const p = (DB.prog[kid.id] = DB.prog[kid.id] || {});
@@ -279,22 +296,89 @@ const Rec = {
   play() { if (this.url) new Audio(this.url).play().catch(() => {}); },
 };
 
-/* ================= home & profiles ================= */
+/* ================= home & players ================= */
 let KID = null;
 function renderHome() {
-  $("profiles").innerHTML = DB.kids.map((k) => {
+  const cards = DB.kids.map((k) => {
     const p = P(k); const stars = Object.values(p.units).reduce((a, u) => a + (u.stars || 0), 0);
-    return '<button class="profile" data-id="' + k.id + '"><span class="av">' + esc(k.av) + '</span><span class="nm">' + esc(k.name) +
+    return '<button class="profile" style="--kc:' + k.color + '" data-id="' + k.id + '"><span class="av">' + esc(k.av) + '</span><span class="nm">' + esc(k.name) +
       '</span><span class="st">&#11088; ' + stars + " &middot; &#128293; " + (p.streak.days || 0) + "</span></button>";
-  }).join("");
-  $("profiles").querySelectorAll(".profile").forEach((b) => (b.onclick = () => { KID = DB.kids.find((k) => k.id === b.dataset.id); openMap(); }));
+  });
+  cards.push('<button class="profile add" id="add-player"><span class="av">&#65291;</span><span class="nm">Bagong player</span><span class="st">New player</span></button>');
+  $("profiles").innerHTML = cards.join("");
+  $("profiles").querySelectorAll(".profile[data-id]").forEach((b) => (b.onclick = () => { KID = DB.kids.find((k) => k.id === b.dataset.id); openMap(); }));
+  $("add-player").onclick = () => openSetup(null);
+  $("home-sub").innerHTML = DB.kids.length
+    ? 'Sino ang maglalaro? <span class="en">Who\'s playing?</span>'
+    : 'Kumusta! Gawa tayo ng player mo. <span class="en">Hi! Let\'s make your player.</span>';
   show("scr-home");
 }
+
+/* ---- make or change a player: name, buddy, level, answer style ---- */
+let SET = null;
+function openSetup(kid) {
+  SET = { kid, step: 0, d: kid ? { name: kid.name, av: kid.av, color: kid.color, level: kid.level, input: kid.input }
+    : { name: "", av: "", color: COLORS[DB.kids.length % COLORS.length], level: 0, input: "" } };
+  $("new-title").textContent = kid ? "Ayusin ang player" : "Bagong player";
+  $("new-title-en").textContent = kid ? "Edit player" : "New player";
+  show("scr-new"); setupStep();
+}
+function setupStep() {
+  const d = SET.d, st = SET.step, body = $("new-body");
+  $("new-dots").innerHTML = [0, 1, 2, 3].map((i) => '<i class="' + (i === st ? "on" : i < st ? "done" : "") + '"></i>').join("");
+  const q = (tl, en) => ($("new-q").innerHTML = esc(tl) + ' <span class="en">' + esc(en) + "</span>");
+  const next = $("new-next");
+  const ready = () => { next.disabled = !(st === 0 ? d.name.trim() : st === 1 ? d.av : st === 2 ? d.level : d.input); };
+  next.innerHTML = st === 3 ? (SET.kid ? "I-save &#10003;" : "Tara na! &#10003;") : "Susunod &#8594;";
+  if (st === 0) {
+    q("Ano ang pangalan mo?", "What's your name?");
+    body.innerHTML = '<input class="type-in" id="np-name" maxlength="16" autocomplete="off" spellcheck="false" placeholder="Pangalan">';
+    const inp = $("np-name"); inp.value = d.name; setTimeout(() => inp.focus(), 200);
+    inp.oninput = () => { d.name = inp.value; ready(); };
+    inp.onkeydown = (e) => { if (e.key === "Enter" && !next.disabled) next.click(); };
+  } else if (st === 1) {
+    q("Pumili ng kaibigang hayop at kulay.", "Pick an animal buddy and a color.");
+    body.innerHTML = '<div class="buddies">' + BUDDIES.map(([e, n]) => '<button class="buddy' + (d.av === e ? " picked" : "") + '" data-e="' + e + '"><span class="pic">' + e + "</span><span>" + n + "</span></button>").join("") +
+      '</div><div class="swatches">' + COLORS.map((c) => '<button class="sw' + (d.color === c ? " picked" : "") + '" style="background:' + c + '" data-c="' + c + '" title="' + c + '"></button>').join("") + "</div>";
+    body.querySelectorAll(".buddy").forEach((b) => (b.onclick = () => { d.av = b.dataset.e; body.querySelectorAll(".buddy").forEach((x) => x.classList.toggle("picked", x === b)); ready(); }));
+    body.querySelectorAll(".sw").forEach((b) => (b.onclick = () => { d.color = b.dataset.c; body.querySelectorAll(".sw").forEach((x) => x.classList.toggle("picked", x === b)); }));
+  } else if (st === 2) {
+    q("Gaano ka na kagaling mag-Tagalog?", "How much Tagalog do you know?");
+    body.innerHTML = '<div class="levels">' + [1, 2, 3].map((n) => '<button class="lvl' + (d.level === n ? " picked" : "") + '" data-n="' + n + '"><span class="pic">' + LEVELS[n].pic +
+      '</span><span class="x"><span class="tl">' + esc(LEVELS[n].tl) + '</span><span class="en">' + esc(LEVELS[n].en) + "</span></span></button>").join("") +
+      '</div><p class="help center">Hindi ito test. Mag-aadjust si Talusi habang naglalaro ka. <span class="en">Not a test. Talusi adjusts as you play.</span></p>';
+    body.querySelectorAll(".lvl").forEach((b) => (b.onclick = () => { d.level = +b.dataset.n; if (!d.input) d.input = d.level === 1 ? "tiles" : "keys"; body.querySelectorAll(".lvl").forEach((x) => x.classList.toggle("picked", x === b)); ready(); }));
+  } else {
+    q("Paano mo gustong sumulat?", "How do you want to write?");
+    body.innerHTML = '<div class="levels two">' +
+      '<button class="lvl' + (d.input === "tiles" ? " picked" : "") + '" data-v="tiles"><span class="pic">🧩</span><span class="x"><span class="tl">Pipili ng salita</span><span class="en">Tap word tiles</span></span></button>' +
+      '<button class="lvl' + (d.input === "keys" ? " picked" : "") + '" data-v="keys"><span class="pic">⌨️</span><span class="x"><span class="tl">Magta-type ako</span><span class="en">Type on the keyboard</span></span></button></div>';
+    body.querySelectorAll(".lvl").forEach((b) => (b.onclick = () => { d.input = b.dataset.v; body.querySelectorAll(".lvl").forEach((x) => x.classList.toggle("picked", x === b)); ready(); }));
+  }
+  fillMascots($("scr-new"));
+  ready();
+}
+$("new-next").onclick = () => {
+  if ($("new-next").disabled) return;
+  if (SET.step < 3) { SET.step++; setupStep(); return; }
+  const d = SET.d; d.name = d.name.trim().slice(0, 16);
+  let k = SET.kid;
+  if (k) {
+    if (k.level !== d.level) { k.hist = []; }
+    Object.assign(k, d);
+  } else {
+    k = Object.assign({ id: newId(), hist: [] }, d); DB.kids.push(k);
+  }
+  save(); KID = k; openMap();
+};
+$("new-back").onclick = () => { if (SET.step > 0) { SET.step--; setupStep(); } else if (SET.kid) openMap(); else renderHome(); };
 
 /* ================= map ================= */
 function openMap() {
   const p = P(KID);
   $("map-avatar").textContent = KID.av; $("map-name").textContent = KID.name;
+  $("map-level").textContent = LEVELS[KID.level].pic; $("map-level").title = "Antas " + KID.level + " (level)";
+  document.querySelector("#scr-map .bar").style.setProperty("--kc", KID.color);
   const alive = p.streak.last === today() || p.streak.last === today(new Date(Date.now() - 864e5));
   $("map-streak").textContent = alive ? p.streak.days : 0;
   $("map-stars").textContent = Object.values(p.units).reduce((a, u) => a + (u.stars || 0), 0);
@@ -313,6 +397,7 @@ function openMap() {
   show("scr-map");
 }
 $("map-back").onclick = renderHome;
+$("map-edit").onclick = () => openSetup(KID);
 $("map-words").onclick = openWords;
 
 /* ================= my words ================= */
@@ -337,12 +422,15 @@ function pickItems(unit, n, filter) {
   return pool.slice(0, n);
 }
 function buildPlan(unit) {
-  const young = KID.age < 9;
-  const types = young
-    ? ["meaning", "repeat", "meaning", "repeat", "build", "fill", "repeat", "meaning", "talk", "howsay"]
-    : ["meaning", "repeat", "howsay", "build", "repeat", "write", "talk", "howsay", "repeat", "write"];
+  const W = KID.input === "keys" ? "write" : "build";
+  const types = {
+    1: ["meaning", "repeat", "meaning", "repeat", "build", "meaning", "repeat", "fill", "meaning", "repeat"],
+    2: ["meaning", "repeat", "howsay", "build", "repeat", W, "talk", "meaning", "repeat", "howsay"],
+    3: ["repeat", "howsay", "talk", W, "howsay", "repeat", "talk", W === "write" ? "write" : "fill", "howsay", "repeat"],
+  }[KID.level] || [];
   const multi = (it) => words(it.tl).length >= 3;
-  const order = pickItems(unit, unit.items.length);
+  let order = pickItems(unit, unit.items.length);
+  if (KID.level === 1) order = order.slice().sort((a, b) => Math.min(words(a.tl).length, 4) - Math.min(words(b.tl).length, 4));
   let k = 0; const nextItem = (f) => {
     for (let t = 0; t < order.length; t++) { const it = order[(k + t) % order.length]; if (!f || f(it)) { k = (k + t + 1); return it; } }
     return order[k++ % order.length];
@@ -425,8 +513,8 @@ function micFoot(label) {
 /** Shared speaking flow. target = phrase object {tl,...}; onPass(firstTry) */
 function speakFlow(target, onPass, phraseForProgress) {
   const mode = micFoot();
-  const loose = DB.set.easy || KID.age < 9;
-  const need = DB.set.easy || KID.age < 9 ? 0.6 : 0.75;
+  const loose = DB.set.easy || KID.level === 1;
+  const need = DB.set.easy || KID.level === 1 ? 0.6 : 0.75;
   const pass = () => { markPhrase(phraseForProgress, true); L.spokenOk++; const o = $("other-ans"); if (o) o.remove(); praise(); onPass(L.tries === 0); };
   const retryOrMove = () => {
     L.tries++;
@@ -587,6 +675,14 @@ function stepWrite(st) {
 }
 
 /* ================= finish ================= */
+/** Move a player's level from their last lessons: up after 3 strong ones in a row, down after 2 hard ones. */
+function adapt(ratio) {
+  const k = KID; k.hist = (k.hist || []).concat(ratio).slice(-3);
+  if (k.level < 3 && k.hist.length >= 3 && k.hist.every((r) => r >= 0.8)) { k.level++; k.hist = []; return "up"; }
+  const last2 = k.hist.slice(-2);
+  if (k.level > 1 && last2.length === 2 && last2.every((r) => r < 0.4)) { k.level--; k.hist = []; return "down"; }
+  return null;
+}
 function confetti() {
   const c = $("confetti"), ctx = c.getContext("2d"); const W = (c.width = innerWidth), H = (c.height = innerHeight);
   const colors = ["#ff6b4a", "#17a398", "#7b61ff", "#ffd23f", "#ff9fb2"];
@@ -609,6 +705,7 @@ function finishLesson() {
   rec.stars = Math.max(rec.stars, stars); rec.plays++; rec.last = today();
   const t = today(), y = today(new Date(Date.now() - 864e5));
   if (p.streak.last !== t) { p.streak.days = p.streak.last === y ? (p.streak.days || 0) + 1 : 1; p.streak.last = t; }
+  const moved = adapt(ratio);
   save();
   $("les-progress").style.width = "100%";
   $("res-stars").innerHTML = [1, 2, 3].map((n) => '<span class="star' + (n <= stars ? " on" : "") + '"></span>').join("");
@@ -616,11 +713,14 @@ function finishLesson() {
   $("res-bubble").textContent = stars === 3 ? "Ang galing mo!" : stars === 2 ? "Magaling!" : "Kaya mo 'yan!";
   $("res-sub").innerHTML = L.first + " sa " + L.plan.length + " ang tama sa unang subok. &#128293; " + p.streak.days + " araw" +
     ' <br><span class="en">' + L.first + " of " + L.plan.length + " right on the first try. Streak: " + p.streak.days + " day(s).</span>";
+  $("res-level").hidden = !moved;
+  if (moved === "up") $("res-level").innerHTML = "&#127881; Antas " + KID.level + "! " + LEVELS[KID.level].pic + ' <span class="en">Level up! Talusi will make it a bit harder.</span>';
+  if (moved === "down") $("res-level").innerHTML = LEVELS[KID.level].pic + ' Mas madali muna tayo. <span class="en">We\'ll make it a little easier for now.</span>';
   show("scr-result"); chime(true); confetti();
   Voice.play(C.sys.done.tl);
   const mins = Math.max(1, Math.round((Date.now() - L.start) / 60000));
   notifyParent(KID.name + " practiced Tagalog: " + u.title + " " + "⭐".repeat(stars),
-    u.en + ". " + L.first + "/" + L.plan.length + " right on the first try. Spoke " + L.spokenOk + " of " + L.spoken + " phrases. " + mins + " min. Streak: " + p.streak.days + " day(s).");
+    u.en + ". " + (moved ? "Level " + (moved === "up" ? "up" : "down") + " to " + KID.level + ". " : "") + L.first + "/" + L.plan.length + " right on the first try. Spoke " + L.spokenOk + " of " + L.spoken + " phrases. " + mins + " min. Streak: " + p.streak.days + " day(s).");
 }
 $("res-again").onclick = () => startLesson(L.unit);
 $("res-next").onclick = () => {
@@ -650,19 +750,19 @@ $("pin-ok").onclick = () => {
 };
 function renderParent() {
   const s = DB.set;
-  $("kid-rows").innerHTML = DB.kids.map((k, i) =>
-    '<div class="kid-row" data-i="' + i + '"><select class="k-av">' + AVATARS.map((a) => "<option" + (a === k.av ? " selected" : "") + ">" + a + "</option>").join("") +
-    '</select><input type="text" class="k-name" maxlength="20" value="' + esc(k.name) + '"><input type="number" class="k-age" min="3" max="15" value="' + k.age +
-    '"><button class="k-del" title="Remove">&#10005;</button></div>').join("");
+  $("kid-rows").innerHTML = DB.kids.length ? DB.kids.map((k, i) =>
+    '<div class="kid-row" data-i="' + i + '"><span class="k-av" style="--kc:' + k.color + '">' + esc(k.av) + '</span><b class="k-name">' + esc(k.name) +
+    '</b><select class="k-level">' + [1, 2, 3].map((n) => '<option value="' + n + '"' + (k.level === n ? " selected" : "") + ">" + LEVELS[n].pic + " Level " + n + "</option>").join("") +
+    '</select><select class="k-input"><option value="tiles"' + (k.input === "tiles" ? " selected" : "") + '>&#129513; Tiles</option><option value="keys"' + (k.input === "keys" ? " selected" : "") +
+    '>&#9000;&#65039; Typing</option></select><button class="k-del" title="Remove">&#10005;</button></div>').join("")
+    : '<p class="help">No players yet. Kids make their own with "+ Bagong player" on the first screen.</p>';
   $("kid-rows").querySelectorAll(".kid-row").forEach((r) => {
     const k = DB.kids[+r.dataset.i];
-    r.querySelector(".k-av").onchange = (e) => { k.av = e.target.value; saved(); };
-    r.querySelector(".k-name").oninput = (e) => { k.name = e.target.value.trim() || "Bata"; saved(); };
-    r.querySelector(".k-age").oninput = (e) => { k.age = Math.max(3, Math.min(15, +e.target.value || 7)); saved(); };
+    r.querySelector(".k-level").onchange = (e) => { k.level = +e.target.value; k.hist = []; saved(); };
+    r.querySelector(".k-input").onchange = (e) => { k.input = e.target.value; saved(); };
     const del = r.querySelector(".k-del");
     del.onclick = () => {
-      if (DB.kids.length <= 1) return toast("Keep at least one kid.");
-      if (del.dataset.sure) { DB.kids.splice(+r.dataset.i, 1); saved(); renderParent(); return; }
+      if (del.dataset.sure) { DB.kids.splice(+r.dataset.i, 1); delete DB.prog[k.id]; saved(); renderParent(); return; }
       del.dataset.sure = "1"; del.textContent = "Sure?"; setTimeout(() => { delete del.dataset.sure; del.innerHTML = "&#10005;"; }, 3000);
     };
   });
@@ -687,7 +787,32 @@ function renderParent() {
     (hard.length ? '<p class="help"><b>Still tricky:</b> ' + esc(hard.slice(0, 12).join(" · ")) + "</p>" : '<p class="help">Progress is saved on this device only.</p>');
 }
 function saved() { save(); $("par-saved").textContent = "Saved."; clearTimeout(saved.h); saved.h = setTimeout(() => ($("par-saved").textContent = ""), 1500); }
-$("kid-add").onclick = () => { DB.kids.push({ id: "k" + Date.now(), name: "Bago", age: 8, av: AVATARS[DB.kids.length % AVATARS.length] }); saved(); renderParent(); };
+/* ---- backup: move players and their progress to another device ---- */
+$("bk-save").onclick = () => {
+  const data = { app: "usap-tayo", v: 1, saved: new Date().toISOString(), kids: DB.kids, prog: DB.prog };
+  const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 1)], { type: "application/json" }));
+  const a = document.createElement("a"); a.href = url; a.download = "usap-tayo-backup-" + today() + ".json";
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 4000);
+  $("bk-result").textContent = "Saved to your Downloads. Open it on the other device with \"Load a backup\".";
+};
+$("bk-load").onclick = () => $("bk-file").click();
+$("bk-file").onchange = async (e) => {
+  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  let data; try { data = JSON.parse(await f.text()); } catch { data = null; }
+  if (!data || data.app !== "usap-tayo" || !Array.isArray(data.kids)) { $("bk-result").textContent = "That file isn't an Usap Tayo! backup."; return; }
+  const activity = (pr) => pr ? Object.values(pr.units || {}).reduce((a, u) => a + (u.plays || 0), 0) + Object.values(pr.phrases || {}).reduce((a, x) => a + (x.said || 0) + (x.miss || 0), 0) : 0;
+  let added = 0, updated = 0, kept = 0;
+  data.kids.forEach((bk) => {
+    if (!bk || !bk.id || !bk.name) return;
+    const bp = (data.prog || {})[bk.id];
+    const i = DB.kids.findIndex((k) => k.id === bk.id);
+    if (i < 0) { DB.kids.push(bk); if (bp) DB.prog[bk.id] = bp; added++; }
+    else if (activity(bp) > activity(DB.prog[bk.id])) { DB.kids[i] = bk; DB.prog[bk.id] = bp; updated++; }
+    else kept++;
+  });
+  saved(); renderParent();
+  $("bk-result").textContent = "Done. " + added + " new, " + updated + " updated" + (kept ? ", " + kept + " already up to date on this device." : ".");
+};
 $("set-voice").onchange = (e) => { DB.set.voice = e.target.value; saved(); renderParent(); };
 $("voice-test").onclick = async () => { await Voice.ensure("sys"); Voice.play(C.sys.hello.tl); };
 $("set-listen").onchange = (e) => { DB.set.listen = e.target.checked; saved(); };
@@ -707,6 +832,6 @@ async function boot() {
   Voice.ensure("sys");
   if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
 }
-window.__usap = { DB, Music, Voice, scoreSpeech, scoreTyping, get L() { return L; } };
+window.__usap = { DB, Music, Voice, scoreSpeech, scoreTyping, get L() { return L; }, _finish: () => finishLesson() };
 boot();
 })();

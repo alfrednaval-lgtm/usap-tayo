@@ -9,7 +9,8 @@ Tagalog speaking and writing practice for kids, with Talusi the Palawan hornbill
 - Allow the microphone when asked. Speaking checks need the internet.
 
 Each lesson mixes listening, repeating after Talusi, answering Talusi's questions, building sentences and typing (or word tiles for younger kids).
-Progress is saved on each device.
+Each kid makes their own player (name, animal buddy, how much Tagalog they know). Talusi adjusts the level as they play.
+Players and progress are saved on each device. Parents can save a backup file to move them to another device.
 
 Talusi's Tagalog voice: pre-made clips from Microsoft's Filipino neural voice (Blessica), for family, non-commercial use.
 Background music: original, composed for this app.
