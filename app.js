@@ -215,26 +215,53 @@ function lev(a, b) {
 }
 function close(a, b, loose) {
   if (a === b) return true;
-  const allow = a.length <= 3 ? 0 : a.length <= 6 ? 1 : 2;
-  return lev(a, b) <= allow + (loose ? 1 : 0);
+  if (!a || !b) return false;
+  // short words must be exact; longer words may be off by a letter or two (speech services misspell Tagalog)
+  let allow = a.length <= 3 ? 0 : a.length <= 6 ? 1 : 2;
+  if (loose && a.length >= 6) allow++;
+  if (Math.abs(a.length - b.length) > allow) return false;
+  return lev(a, b) <= allow;
 }
 const OPTIONAL = new Set(["po"]);   // saying it without "po" still counts when speaking
-/** How much of the expected phrase is in what was heard. Returns ratio (0-1) and per-word marks. */
-function scoreSpeech(expected, heardList, loose) {
-  const E = words(expected);
-  let best = { ratio: 0, marks: E.map(() => false), heard: heardList[0] || "" };
-  for (const heard of heardList) {
-    const H = words(heard); const used = new Set();
-    const marks = E.map((w) => {
-      const i = H.findIndex((h, k) => !used.has(k) && close(w, h, loose));
-      if (i >= 0) { used.add(i); return true; }
-      return false;
-    });
-    const need = E.filter((w) => !OPTIONAL.has(w));
-    const got = E.filter((w, i) => marks[i] && !OPTIONAL.has(w)).length;
-    const ratio = need.length ? got / need.length : marks.every(Boolean) ? 1 : 0;
-    if (ratio > best.ratio) best = { ratio, marks, heard };
+/** Lines up the expected words with what was heard, in order. Handles a word split in two ("o po" for "opo")
+    or two words run together ("salamatpo"). Returns true/false per expected word. */
+const joined = (a, b) => a === b || (a.length >= 7 && lev(a, b) <= 1);   // split/merged words must match (almost) exactly
+function align(E, H, loose) {
+  const n = E.length, m = H.length;
+  const dp = Array.from({ length: n + 2 }, () => new Array(m + 2).fill(0));
+  const ch = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(1));
+  for (let i = n - 1; i >= 0; i--) for (let j = m; j >= 0; j--) {
+    let best = dp[i + 1][j], c = 1;                                                     // expected word not said
+    if (j < m && dp[i][j + 1] > best) { best = dp[i][j + 1]; c = 2; }                   // extra word heard
+    if (j < m && close(E[i], H[j], loose) && 1 + dp[i + 1][j + 1] > best) { best = 1 + dp[i + 1][j + 1]; c = 3; }
+    if (j + 1 < m && joined(E[i], H[j] + H[j + 1]) && 1 + dp[i + 1][j + 2] > best) { best = 1 + dp[i + 1][j + 2]; c = 4; }
+    if (i + 1 < n && j < m && joined(E[i] + E[i + 1], H[j]) && 2 + dp[i + 2][j + 1] > best) { best = 2 + dp[i + 2][j + 1]; c = 5; }
+    dp[i][j] = best; ch[i][j] = c;
   }
+  const marks = E.map(() => false); let i = 0, j = 0;
+  while (i < n) {
+    const c = ch[i][j];
+    if (c === 1) i++; else if (c === 2) j++;
+    else if (c === 3) { marks[i] = true; i++; j++; }
+    else if (c === 4) { marks[i] = true; i++; j += 2; }
+    else { marks[i] = marks[i + 1] = true; i += 2; j++; }
+  }
+  return marks;
+}
+/** Checks what was heard against the phrase. Every word has to be there, in order ("po" is optional).
+    With "extra forgiving" on, a long phrase (4+ words) may miss one word. */
+function scoreSpeech(expected, heardList, loose, easy) {
+  const E = words(expected);
+  const req = E.map((w) => !OPTIONAL.has(w)); const nReq = req.filter(Boolean).length;
+  let best = null;
+  for (const heard of heardList) {
+    const marks = align(E, words(heard), loose);
+    const got = E.filter((w, i) => marks[i] && req[i]).length;
+    const ratio = nReq ? got / nReq : marks.every(Boolean) ? 1 : 0;
+    if (!best || ratio > best.ratio) best = { ratio, marks, heard, missing: nReq - got };
+  }
+  if (!best) best = { ratio: 0, marks: E.map(() => false), heard: "", missing: nReq };
+  best.complete = best.missing === 0 || (!!easy && nReq >= 4 && best.missing <= 1);
   return best;
 }
 /** Word-by-word comparison for typing. */
@@ -255,28 +282,73 @@ function scoreTyping(expected, typed, loose) {
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 const Listen = {
   canCheck() { return !!SR && DB.set.listen; },
-  rec: null,
-  start(onDone) {
-    const r = new SR(); this.rec = r;
-    r.lang = "fil-PH"; r.interimResults = true; r.maxAlternatives = 5; r.continuous = false;
-    const heard = []; let interim = "";
-    r.onresult = (e) => {
-      interim = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        const res = e.results[i];
-        if (res.isFinal) for (let k = 0; k < res.length; k++) heard.push(res[k].transcript);
-        else interim += res[0].transcript;
-      }
-      if (interim) $("heard").textContent = "Narinig ko: " + interim;
+  cur: null,
+  /** Listens until the phrase is complete (done(texts) says so), the kid goes quiet after talking,
+      or time runs out. Pauses between words don't end it: if the browser stops on a pause, it starts again. */
+  start(done, onDone) {
+    const S = { segs: [], interim: "", ended: false, stopping: false, cancelled: false, runs: 0, t0: Date.now(), last: 0, rec: null, err: null };
+    this.cur = S;
+    const texts = () => {
+      const segs = S.interim ? S.segs.concat([[S.interim]]) : S.segs;
+      if (!segs.length) return [];
+      const n = Math.max(...segs.map((x) => x.length)); const out = [];
+      for (let k = 0; k < n; k++) out.push(segs.map((x) => x[Math.min(k, x.length - 1)]).join(" ").trim());
+      return out.filter(Boolean);
     };
-    let finished = false;
-    const end = (err) => { if (finished) return; finished = true; this.rec = null; if (!heard.length && interim) heard.push(interim); onDone(heard, err); };
-    r.onerror = (e) => end(e.error || "error");
-    r.onend = () => end(null);
-    try { r.start(); } catch (e) { end("start"); }
-    setTimeout(() => { try { r.stop(); } catch {} }, 8000);
+    const finish = (err) => {
+      if (S.ended) return; S.ended = true; clearInterval(S.tick);
+      try { S.rec && S.rec.abort(); } catch {}
+      if (this.cur === S) this.cur = null;
+      if (!S.cancelled) onDone(texts(), err);
+    };
+    S.finish = finish;
+    const run = () => {
+      const r = new SR(); S.rec = r; S.runs++; const base = S.segs.length;
+      r.lang = "fil-PH"; r.interimResults = true; r.maxAlternatives = 5; r.continuous = true;
+      r.onresult = (e) => {
+        const fin = [], inter = [];
+        for (let i = 0; i < e.results.length; i++) {
+          const res = e.results[i];
+          if (res.isFinal) fin.push(Array.from({ length: res.length }, (_, k) => res[k].transcript));
+          else inter.push(res[0].transcript);
+        }
+        S.segs.length = base; S.segs.push(...fin); S.interim = inter.join(" ");
+        S.last = Date.now();
+        const t = texts(); if (t.length && $("heard")) $("heard").textContent = "Narinig ko: " + t[0];
+        if (!S.stopping && done(t)) this.stop();
+      };
+      r.onerror = (e) => { S.err = e.error; };
+      r.onend = () => {
+        if (S.ended) return;
+        if (S.interim) { S.segs.push([S.interim]); S.interim = ""; }
+        if (S.stopping) return finish(null);
+        if (["not-allowed", "service-not-allowed", "language-not-supported", "network", "audio-capture"].includes(S.err)) return finish(S.err);
+        const now = Date.now();
+        const keepGoing = S.runs < 5 && now - S.t0 < 11000 && (S.last ? now - S.last < 1800 : now - S.t0 < 7000);
+        if (keepGoing) { S.err = null; try { run(); } catch { finish("start"); } }
+        else finish(null);
+      };
+      try { r.start(); } catch { finish("start"); }
+    };
+    S.tick = setInterval(() => {
+      const now = Date.now();
+      if (now - S.t0 > 12000 || (S.last && now - S.last > 1800) || (!S.last && now - S.t0 > 7000)) this.stop();
+    }, 200);
+    run();
   },
-  stop() { try { this.rec && this.rec.stop(); } catch {} },
+  /** Stop and check what was heard so far. */
+  stop() {
+    const S = this.cur; if (!S || S.stopping) return;
+    S.stopping = true;
+    try { S.rec.stop(); } catch { S.finish(null); }
+    setTimeout(() => S.finish(null), 1200);
+  },
+  /** Stop and throw away what was heard (e.g. Talusi is about to speak). */
+  cancel() {
+    const S = this.cur; if (!S) return;
+    S.cancelled = true; S.finish(null);
+    const mic = $("mic"); if (mic) mic.classList.remove("on");
+  },
 };
 
 /* record-and-compare, for browsers that can't check speech */
@@ -447,9 +519,9 @@ async function startLesson(unit) {
   show("scr-lesson");
   runStep();
 }
-$("les-close").onclick = () => { Voice.stop(); Listen.stop(); openMap(); };
-$("btn-play").onclick = () => L && L.say && Voice.play(L.say);
-$("btn-slow").onclick = () => L && L.say && Voice.play(L.say, true);
+$("les-close").onclick = () => { Voice.stop(); Listen.cancel(); clearTimeout(L && L.replay); openMap(); };
+$("btn-play").onclick = () => { if (!L || !L.say) return; if (Listen.cur) { Listen.cancel(); feedback(""); } Voice.play(L.say); };
+$("btn-slow").onclick = () => { if (!L || !L.say) return; if (Listen.cur) { Listen.cancel(); feedback(""); } Voice.play(L.say, true); };
 
 function setPrompt(key) {
   const s = C.sys[key]; $("les-prompt").textContent = s.tl; $("les-prompt-en").textContent = s.en;
@@ -474,7 +546,7 @@ function runStep() {
   const st = L.plan[L.i];
   $("les-progress").style.width = (L.i / L.plan.length) * 100 + "%";
   $("les-count").textContent = L.i + 1 + "/" + L.plan.length;
-  feedback(""); foot(""); L.tries = 0;
+  feedback(""); foot(""); L.tries = 0; L.noListen = false; clearTimeout(L.replay); Listen.cancel();
   ({ meaning: stepMeaning, repeat: stepRepeat, howsay: stepHowSay, build: stepBuild, fill: stepFill, write: stepWrite, talk: stepTalk })[st.type](st);
   fillMascots($("les-stage"));
 }
@@ -503,7 +575,7 @@ function speakCard(it, hideTl) {
 }
 function sayArea() { return '<div class="heard" id="heard"></div>'; }
 function micFoot(label) {
-  const mode = Listen.canCheck() ? "check" : Rec.can() ? "record" : "honor";
+  const mode = Listen.canCheck() && !L.noListen ? "check" : Rec.can() ? "record" : "honor";
   const txt = mode === "check" ? "Pindutin at magsalita" : mode === "record" ? "Pindutin para mag-record" : "Sabihin nang malakas";
   foot('<div class="mic-label">' + (label || txt) + ' <span class="en">' + (mode === "check" ? "Tap and speak" : mode === "record" ? "Tap to record yourself" : "Say it out loud") + "</span></div>" +
     (mode === "honor" ? '<button class="btn btn-teal" id="said">&#128483; Nasabi ko na!</button>' : '<button class="mic" id="mic" title="Speak">&#127908;</button>') +
@@ -514,7 +586,7 @@ function micFoot(label) {
 function speakFlow(target, onPass, phraseForProgress) {
   const mode = micFoot();
   const loose = DB.set.easy || KID.level === 1;
-  const need = DB.set.easy || KID.level === 1 ? 0.6 : 0.75;
+  let hiccups = 0;   // speech service trouble in this step
   const pass = () => { markPhrase(phraseForProgress, true); L.spokenOk++; const o = $("other-ans"); if (o) o.remove(); praise(); onPass(L.tries === 0); };
   const retryOrMove = () => {
     L.tries++;
@@ -543,25 +615,30 @@ function speakFlow(target, onPass, phraseForProgress) {
   }
   mic.onclick = () => {
     if (mic.classList.contains("on")) { Listen.stop(); return; }
-    Voice.stop(); mic.classList.add("on"); feedback("Nakikinig si Talusi... 👂", null); $("heard").textContent = "";
-    Listen.start((heard, err) => {
+    clearTimeout(L.replay); Voice.stop(); mic.classList.add("on"); feedback("Nakikinig si Talusi... 👂", null); $("heard").textContent = "";
+    const spans = document.querySelectorAll("#say-tl .w"); spans.forEach((s) => s.classList.remove("ok", "miss"));
+    Listen.start((texts) => scoreSpeech(target.tl, texts, loose, DB.set.easy).complete, (heard, err) => {
       mic.classList.remove("on");
-      if (err === "not-allowed" || err === "service-not-allowed" || err === "network" || err === "language-not-supported" || err === "start") {
+      if (err === "not-allowed" || err === "service-not-allowed" || err === "language-not-supported") {
         DB.set.listen = false; save();
         feedback("Hindi ko marinig dito. Mag-record na lang tayo.", null);
         L.spoken--; speakFlow(target, onPass, phraseForProgress); return;
       }
-      if (!heard.length) { feedback("Hindi kita narinig. Lakasan mo pa!", false); if (retryOrMove()) return; return; }
-      const r = scoreSpeech(target.tl, heard, loose);
+      if (err) {   // network hiccup or the mic was busy: try again, and only fall back for this step
+        hiccups++;
+        if (hiccups >= 2) { L.noListen = true; feedback("Mahina ang internet. Mag-record na lang tayo dito.", null); L.spoken--; speakFlow(target, onPass, phraseForProgress); return; }
+        feedback("Hindi kita narinig nang maayos. Subukan ulit.", false); return;
+      }
+      if (!heard.length) { feedback("Hindi kita narinig. Lakasan mo pa!", false); retryOrMove(); return; }
+      const r = scoreSpeech(target.tl, heard, loose, DB.set.easy);
       $("heard").textContent = "Narinig ko: “" + r.heard + "”";
-      const spans = document.querySelectorAll("#say-tl .w");
       r.marks.forEach((ok, i) => spans[i] && spans[i].classList.add(ok ? "ok" : "miss"));
       $("say-card") && $("say-card").classList.remove("hidden-text");
-      if (r.ratio >= need) { pass(); return; }
+      if (r.complete) { pass(); return; }
       chime(false);
       if (retryOrMove()) return;
-      feedback((r.ratio >= 0.4 ? C.sys.almost.tl : C.sys.tryagain.tl), false);
-      setTimeout(() => { spans.forEach((s) => s.classList.remove("ok", "miss")); Voice.play(target.tl); }, 1600);
+      feedback(r.ratio > 0 ? "Kulang pa. Sabihin mo ang buo! (Say the whole thing.)" : C.sys.tryagain.tl, false);
+      L.replay = setTimeout(() => { if (!Listen.cur) { spans.forEach((s) => s.classList.remove("ok", "miss")); Voice.play(target.tl); } }, 1600);
     });
   };
 }
@@ -594,7 +671,7 @@ function stepTalk(st) {
     const card = document.createElement("div"); card.innerHTML = speakCard(a, false); $("ans").after(card.firstElementChild);
     if (q.answers.length > 1) {
       $("say-card").insertAdjacentHTML("afterend", '<button class="btn btn-soft btn-sm" id="other-ans">&#8634; Ibang sagot <span class="en">Pick another answer</span></button>');
-      $("other-ans").onclick = () => { Listen.stop(); document.querySelectorAll("#say-card,#other-ans").forEach((c) => c.remove()); $("ans").hidden = false; $("heard").textContent = ""; feedback(""); L.spoken--; foot('<div class="mic-label">Pumili ng sagot, tapos sabihin. <span class="en">Pick an answer, then say it.</span></div>'); };
+      $("other-ans").onclick = () => { Listen.cancel(); document.querySelectorAll("#say-card,#other-ans").forEach((c) => c.remove()); $("ans").hidden = false; $("heard").textContent = ""; feedback(""); L.spoken--; foot('<div class="mic-label">Pumili ng sagot, tapos sabihin. <span class="en">Pick an answer, then say it.</span></div>'); };
     }
     speakFlow(a, (ft) => stepDone(ft), L.unit.items.find((i) => i.tl === a.tl));
   };
@@ -832,6 +909,6 @@ async function boot() {
   Voice.ensure("sys");
   if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
 }
-window.__usap = { DB, Music, Voice, scoreSpeech, scoreTyping, get L() { return L; }, _finish: () => finishLesson() };
+window.__usap = { DB, Music, Voice, scoreSpeech, scoreTyping, get L() { return L; }, _finish: () => finishLesson(), _run: () => runStep() };
 boot();
 })();
